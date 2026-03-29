@@ -47,3 +47,41 @@ Notes
 - Responses are saved per visitor in `localStorage` under key `studyflowResponses_v1`.
 - Admin panel visible when visiting the page with `?admin=1` (useful to download CSVs from the browser that previously submitted responses).
 - If you want centralized server-side collection, I can add a Vercel Serverless Function (or connect Google Sheets/Airtable) in a follow-up.
+ - Responses are saved per visitor in `localStorage` under key `studyflowResponses_v1`.
+ - Admin panel visible when visiting the page with `?admin=1` (useful to download CSVs from the browser that previously submitted responses).
+
+Server-side submissions (optional)
+
+I added two Vercel Serverless Functions in the `api/` folder to enable centralized submissions and an admin list:
+
+- `api/submit` (POST): accepts a submission JSON and appends it to `submissions.json` in the repository using the GitHub Contents API.
+- `api/list` (GET): returns the list of submissions from `submissions.json` (protected by an admin secret).
+
+How it works & required environment variables
+
+1. Set these environment variables in your Vercel project (Project Settings -> Environment Variables):
+
+   - `GITHUB_TOKEN` — a GitHub Personal Access Token with `repo` (contents) scope.
+   - `GITHUB_REPO` — the repo where submissions will be stored, e.g. `Smrsiz/studyflow-ai-survery`.
+   - `ADMIN_SECRET` — a random secret string used to protect the admin `api/list` endpoint.
+
+2. The serverless function will create or update `submissions.json` in the repository root. The client will attempt to POST to `/api/submit` automatically; if it fails the response is still kept in localStorage.
+
+3. To view centralized responses after deploying, browse:
+
+   `https://<your-vercel-domain>/studyflow-survey.html?admin=1`
+
+   The admin panel will try to use the `/api/list` endpoint (it will request the secret). For security you should configure the admin UI to call `/api/list?secret=<ADMIN_SECRET>` or set the secret via an admin-only UI (the current simple approach expects manual fetch with the secret stored by you in a secure place).
+
+Security notes
+
+- The `api/submit` endpoint requires `GITHUB_TOKEN` and will write to the repo specified by `GITHUB_REPO`. Keep the token secret and scoped minimally.
+- `api/list` requires `ADMIN_SECRET`. Do not expose it publicly.
+
+Next steps to deploy (summary)
+
+1. Set environment variables on Vercel for the project.
+2. Deploy via Vercel dashboard or `vercel --prod` from this folder.
+3. Open the survey with `?admin=1` and use the admin secret to fetch centralized submissions.
+
+If you'd like, I can push these changes and then help you deploy — you'll need to add the two environment variables and the admin secret in your Vercel project before testing remote submissions.

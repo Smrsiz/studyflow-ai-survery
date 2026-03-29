@@ -227,7 +227,23 @@
         new FormData(form).forEach((v,k)=>{ data[k]=v });
         // ensure keys exist
         ['name','email','role','frequency','feedback'].forEach(k=>{ if(!(k in data)) data[k]='' });
+
+        // Save locally as fallback
         saveResponse(data);
+
+        // Try to POST to server endpoint (/api/submit) if available
+        (async()=>{
+          try{
+            const endpoint = '/api/submit';
+            const r = await fetch(endpoint, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(data) });
+            if(!r.ok) throw new Error('Server rejected');
+            // success
+          }catch(err){
+            // ignore — localStorage holds the data
+            console.warn('Remote submit failed, saved locally', err);
+          }
+        })();
+
         form.style.display = 'none';
         document.getElementById('form-body').style.opacity = '0';
         thankyou.classList.add('visible');
