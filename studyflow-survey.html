@@ -166,8 +166,16 @@
     <div id="admin" class="admin" style="display:none">
       <strong>Admin panel</strong>
       <div style="margin-top:8px; display:flex; gap:8px; flex-wrap:wrap">
-        <button id="downloadCsv" class="submit-btn" style="padding:8px 12px; font-size:13px">Download CSV</button>
+        <button id="downloadCsv" class="submit-btn" style="padding:8px 12px; font-size:13px">Download CSV (local)</button>
         <button id="clearStorage" class="submit-btn" style="padding:8px 12px; font-size:13px; background:#444">Clear stored responses</button>
+      </div>
+      <div style="margin-top:12px; font-size:13px; color:var(--muted)">
+        <label style="display:block; margin-bottom:6px">Remote submissions (optional)</label>
+        <div style="display:flex; gap:8px; align-items:center; flex-wrap:wrap">
+          <input id="adminSecret" placeholder="Enter ADMIN_SECRET" style="padding:8px; border-radius:8px; border:1px solid rgba(255,255,255,0.06); background:transparent; color:var(--text)">
+          <button id="fetchRemote" class="submit-btn" style="padding:8px 12px; font-size:13px">Fetch remote</button>
+          <button id="downloadRemoteCsv" class="submit-btn" style="padding:8px 12px; font-size:13px; background:#2b6cb0">Download remote CSV</button>
+        </div>
       </div>
       <div id="responsesList" style="margin-top:12px; font-size:13px; color:var(--muted)"></div>
     </div>
@@ -262,14 +270,17 @@
         // show first 10
         const list = document.createElement('div'); list.style.marginTop='8px';
         arr.slice(-20).reverse().forEach(r=>{
-          const d = document.createElement('div'); d.style.borderTop='1px solid rgba(255,255,255,0.03)'; d.style.padding='8px 0';
-          d.innerHTML = '<div style="font-weight:600">' + (r.name || r.email || r.ts) + '</div>' +
-                        '<div style="color:var(--muted); font-size:13px">' + (r.role||'') + ' — ' + (r.frequency||'') + '</div>' +
-                        '<div style="margin-top:6px">' + (r.feedback ? escapeHtml(r.feedback) : '<span style="color:var(--muted)">No feedback</span>') + '</div>';
-          list.appendChild(d);
-        });
-        responsesList.appendChild(list);
-      }
+            const d = document.createElement('div'); d.style.borderTop='1px solid rgba(255,255,255,0.03)'; d.style.padding='8px 0';
+            d.innerHTML = '<div style="font-weight:600">' + (r.name || r.email || r.ts) + '</div>' +
+                          '<div style="color:var(--muted); font-size:13px">' + (r.role||'') + ' — ' + (r.frequency||'') + '</div>' +
+                          '<div style="margin-top:6px">' + (r.feedback ? escapeHtml(r.feedback) : '<span style="color:var(--muted)">No feedback</span>') + '</div>';
+            list.appendChild(d);
+          });
+          responsesList.appendChild(list);
+        }
+
+        // Remote fetch handlers will be attached below
+      
 
       downloadCsv.addEventListener('click', ()=>{
         const arr = getResponses();
@@ -280,6 +291,58 @@
         const url = URL.createObjectURL(blob);
         const a = document.createElement('a'); a.href = url; a.download = 'studyflow-responses.csv'; document.body.appendChild(a); a.click(); a.remove(); URL.revokeObjectURL(url);
       });
+
+      // Remote admin actions: fetch remote list and download remote CSV (requires ADMIN_SECRET)
+      const fetchRemoteBtn = document.getElementById('fetchRemote');
+      const downloadRemoteCsvBtn = document.getElementById('downloadRemoteCsv');
+      const adminSecretInput = document.getElementById('adminSecret');
+
+      if(fetchRemoteBtn){
+        fetchRemoteBtn.addEventListener('click', async ()=>{
+          const secret = adminSecretInput.value.trim();
+          if(!secret) return alert('Enter ADMIN_SECRET to fetch remote submissions');
+          try{
+            const res = await fetch('/api/list?secret=' + encodeURIComponent(secret));
+            if(!res.ok) throw new Error('Unauthorized or server error');
+            const arr = await res.json();
+            renderRemote(arr);
+          }catch(err){
+            alert('Failed to fetch remote submissions: ' + err.message);
+          }
+        });
+      }
+
+      if(downloadRemoteCsvBtn){
+        downloadRemoteCsvBtn.addEventListener('click', async ()=>{
+          const secret = adminSecretInput.value.trim();
+          if(!secret) return alert('Enter ADMIN_SECRET to download remote CSV');
+          try{
+            const res = await fetch('/api/list?secret=' + encodeURIComponent(secret));
+            if(!res.ok) throw new Error('Unauthorized or server error');
+            const arr = await res.json();
+            if(!arr || arr.length===0) return alert('No remote responses');
+            const keys = ['ts','name','email','role','frequency','feedback'];
+            const rows = [keys.join(',')].concat(arr.map(r=> keys.map(k=> '"'+(String(r[k]||'')).replace(/"/g,'""')+'"').join(',')));
+            const blob = new Blob([rows.join('\n')], {type:'text/csv;charset=utf-8;'});
+            const url = URL.createObjectURL(blob);
+            const a = document.createElement('a'); a.href = url; a.download = 'studyflow-remote-responses.csv'; document.body.appendChild(a); a.click(); a.remove(); URL.revokeObjectURL(url);
+          }catch(err){ alert('Failed to download remote CSV: '+err.message) }
+        });
+      }
+
+      function renderRemote(arr){
+        const out = document.getElementById('responsesList');
+        out.innerHTML = '<div>Remote responses: ' + (arr.length||0) + '</div>';
+        const list = document.createElement('div'); list.style.marginTop='8px';
+        arr.slice(-50).reverse().forEach(r=>{
+          const d = document.createElement('div'); d.style.borderTop='1px solid rgba(255,255,255,0.03)'; d.style.padding='8px 0';
+          d.innerHTML = '<div style="font-weight:600">' + (r.name || r.email || r.ts) + '</div>' +
+                        '<div style="color:var(--muted); font-size:13px">' + (r.role||'') + ' — ' + (r.frequency||'') + '</div>' +
+                        '<div style="margin-top:6px">' + (r.feedback ? escapeHtml(r.feedback) : '<span style="color:var(--muted)">No feedback</span>') + '</div>';
+          list.appendChild(d);
+        });
+        out.appendChild(list);
+      }
 
       clearStorage.addEventListener('click', ()=>{
         if(!confirm('Clear all stored responses? This cannot be undone.')) return;
